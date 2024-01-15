@@ -16,6 +16,7 @@ package control
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
@@ -29,6 +30,7 @@ import (
 	"github.com/clusterlink-net/clusterlink/pkg/api"
 	"github.com/clusterlink-net/clusterlink/pkg/apis/clusterlink.net/v1alpha1"
 	"github.com/clusterlink-net/clusterlink/pkg/util/net"
+	"github.com/clusterlink-net/clusterlink/pkg/util/tls"
 )
 
 // Manager is responsible for handling control operations,
@@ -36,9 +38,14 @@ import (
 // This includes target port generation for imported services, as well as
 // k8s service creation per imported service.
 type Manager struct {
+	peerManager
+
 	client  client.Client
 	crdMode bool
 	ports   *portManager
+
+	peerLock sync.RWMutex
+	peers    map[string]*v1alpha1.Peer
 
 	logger *logrus.Entry
 }
@@ -219,13 +226,14 @@ func serviceChanged(svc1, svc2 *v1.Service) bool {
 }
 
 // NewManager returns a new control manager.
-func NewManager(cl client.Client, crdMode bool) *Manager {
+func NewManager(cl client.Client, peerTLS *tls.ParsedCertData, crdMode bool) *Manager {
 	logger := logrus.WithField("component", "controlplane.control.manager")
 
 	return &Manager{
-		client:  cl,
-		crdMode: crdMode,
-		ports:   newPortManager(),
-		logger:  logger,
+		peerManager: newPeerManager(cl, peerTLS),
+		client:      cl,
+		crdMode:     crdMode,
+		ports:       newPortManager(),
+		logger:      logger,
 	}
 }

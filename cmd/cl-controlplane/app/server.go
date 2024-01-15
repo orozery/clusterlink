@@ -158,29 +158,35 @@ func (o *Options) Run() error {
 	httpServer := utilrest.NewServer("controlplane-http", parsedCertData.ServerConfig())
 	grpcServer := grpc.NewServer("controlplane-grpc", parsedCertData.ServerConfig())
 
-	runnableManager := runnable.NewManager()
-	runnableManager.Add(controller.NewManager(mgr))
-	runnableManager.AddServer(httpServerAddress, httpServer)
-	runnableManager.AddServer(grpcServerAddress, grpcServer)
-	runnableManager.AddServer(controlplaneServerListenAddress, sniProxy)
-
 	authzManager, err := authz.NewManager(parsedCertData)
 	if err != nil {
 		return fmt.Errorf("cannot create authorization manager: %w", err)
 	}
 
-	authz.RegisterHandlers(authzManager, &httpServer.Server)
-	if err := authz.CreateControllers(authzManager, mgr); err != nil {
+	err = authz.CreateControllers(authzManager, mgr, namespace, o.CRDMode)
+	if err != nil {
 		return fmt.Errorf("cannot create authz controllers: %w", err)
 	}
 
-	controlManager := control.NewManager(mgr.GetClient(), o.CRDMode)
+	authz.RegisterHandlers(authzManager, &httpServer.Server)
+
+	controlManager := control.NewManager(mgr.GetClient(), parsedCertData, o.CRDMode)
 
 	xdsManager := xds.NewManager()
 	xds.RegisterService(
 		context.Background(), xdsManager, grpcServer.GetGRPCServer())
 
-	if !o.CRDMode {
+	if o.CRDMode {
+		err := xds.CreateControllers(xdsManager, mgr, namespace)
+		if err != nil {
+			return fmt.Errorf("cannot create xDS controllers: %w", err)
+		}
+
+		err = control.CreateControllers(controlManager, mgr, namespace)
+		if err != nil {
+			return fmt.Errorf("cannot create control controllers: %w", err)
+		}
+	} else {
 		// open store
 		kvStore, err := bolt.Open(StoreFile)
 		if err != nil {
@@ -202,7 +208,18 @@ func (o *Options) Run() error {
 		}
 
 		cprest.RegisterHandlers(restManager, httpServer)
+
+		controlManager.SetStatusCallback(func(pr *v1alpha1.Peer) {
+			authzManager.AddPeer(pr)
+		})
 	}
+
+	runnableManager := runnable.NewManager()
+	runnableManager.Add(controller.NewManager(mgr))
+	runnableManager.Add(controlManager)
+	runnableManager.AddServer(httpServerAddress, httpServer)
+	runnableManager.AddServer(grpcServerAddress, grpcServer)
+	runnableManager.AddServer(controlplaneServerListenAddress, sniProxy)
 
 	return runnableManager.Run()
 }

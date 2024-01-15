@@ -14,12 +14,15 @@
 package k8s
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 
 	"github.com/stretchr/testify/require"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/clusterlink-net/clusterlink/pkg/api"
+	"github.com/clusterlink-net/clusterlink/pkg/apis/clusterlink.net/v1alpha1"
 	"github.com/clusterlink-net/clusterlink/pkg/bootstrap/platform"
 	"github.com/clusterlink-net/clusterlink/pkg/policyengine"
 	"github.com/clusterlink-net/clusterlink/pkg/policyengine/policytypes"
@@ -27,6 +30,74 @@ import (
 	"github.com/clusterlink-net/clusterlink/tests/e2e/k8s/services/httpecho"
 	"github.com/clusterlink-net/clusterlink/tests/e2e/k8s/util"
 )
+
+func (s *TestSuite) TestConnectivityCRD() {
+	s.RunOnAllDataplaneTypes(func(cfg *util.PeerConfig) {
+		cfg.CRDMode = true
+		cl, err := s.fabric.DeployClusterlinks(2, cfg)
+		require.Nil(s.T(), err)
+
+		require.Nil(s.T(), cl[0].CreateService(&httpEchoService))
+		require.Nil(s.T(), cl[0].CreateExport("dontcare", &httpEchoService))
+		// TODO: create policy
+		require.Nil(s.T(), cl[1].CreatePeer(cl[0]))
+
+		importedService := &util.Service{
+			Name: httpEchoService.Name,
+			Port: 80,
+		}
+		require.Nil(s.T(), cl[1].Cluster().Resources().Create(
+			context.Background(),
+			&v1alpha1.Import{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      importedService.Name,
+					Namespace: cl[1].Namespace(),
+				},
+				Spec: v1alpha1.ImportSpec{
+					Port: importedService.Port,
+					Sources: []v1alpha1.ImportSource{{
+						Peer:            cl[0].Name(),
+						ExportName:      httpEchoService.Name,
+						ExportNamespace: cl[1].Namespace(),
+					}},
+				},
+			}))
+
+		policyAllowAll := v1alpha1.AccessPolicySpec{
+			Action: v1alpha1.AccessPolicyActionAllow,
+			From: v1alpha1.WorkloadSetOrSelectorList{{
+				WorkloadSelector: &metav1.LabelSelector{},
+			}},
+			To: v1alpha1.WorkloadSetOrSelectorList{{
+				WorkloadSelector: &metav1.LabelSelector{},
+			}},
+		}
+
+		require.Nil(s.T(), cl[0].Cluster().Resources().Create(
+			context.Background(),
+			&v1alpha1.AccessPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "allow-all",
+					Namespace: cl[0].Namespace(),
+				},
+				Spec: policyAllowAll,
+			}))
+
+		require.Nil(s.T(), cl[1].Cluster().Resources().Create(
+			context.Background(),
+			&v1alpha1.AccessPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "allow-all",
+					Namespace: cl[1].Namespace(),
+				},
+				Spec: policyAllowAll,
+			}))
+
+		data, err := cl[1].AccessService(httpecho.GetEchoValue, importedService, true, nil)
+		require.Nil(s.T(), err)
+		require.Equal(s.T(), cl[0].Name(), data)
+	})
+}
 
 func (s *TestSuite) TestConnectivity() {
 	s.RunOnAllDataplaneTypes(func(cfg *util.PeerConfig) {
