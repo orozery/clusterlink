@@ -33,6 +33,8 @@ import (
 
 // PeerConfig is a peer configuration.
 type PeerConfig struct {
+	// Controlplanes is the number of controlplane instances.
+	Controlplanes uint16
 	// DataplaneType is the dataplane type (envoy / go).
 	DataplaneType string
 	// Dataplanes is the number of dataplane instances.
@@ -318,6 +320,7 @@ func (f *Fabric) DeployClusterlinks(peerCount uint8, cfg *PeerConfig) ([]*Cluste
 	if cfg == nil {
 		// default config
 		cfg = &PeerConfig{
+			Controlplanes: 1,
 			DataplaneType: platform.DataplaneTypeEnvoy,
 			Dataplanes:    1,
 		}

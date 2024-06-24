@@ -34,6 +34,7 @@ import (
 func (s *TestSuite) TestOperator() {
 	// Deploy ClusterLink with operator
 	cfg := &util.PeerConfig{
+		Controlplanes:      1,
 		DataplaneType:      platform.DataplaneTypeEnvoy,
 		Dataplanes:         1,
 		DeployWithOperator: true,

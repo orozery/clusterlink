@@ -74,7 +74,7 @@ metadata:
   labels:
     app: cl-controlplane
 spec:
-  replicas: 1
+  replicas: {{.controlplanes}}
   selector:
     matchLabels:
       app: cl-controlplane
@@ -275,6 +275,7 @@ func K8SConfig(config *Config) ([]byte, error) {
 	args := map[string]interface{}{
 		"peer":              config.Peer,
 		"namespace":         config.Namespace,
+		"controlplanes":     config.Controlplanes,
 		"dataplanes":        config.Dataplanes,
 		"dataplaneType":     config.DataplaneType,
 		"logLevel":          config.LogLevel,
@@ -356,6 +357,7 @@ func K8SClusterLinkInstanceConfig(config *Config, name string) ([]byte, error) {
 
 	args := map[string]interface{}{
 		"name":               name,
+		"controlplanes":      config.Controlplanes,
 		"dataplanes":         config.Dataplanes,
 		"dataplaneType":      config.DataplaneType,
 		"logLevel":           config.LogLevel,
