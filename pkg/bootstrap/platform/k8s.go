@@ -193,6 +193,9 @@ metadata:
   name: cl-controlplane
 rules:
 - apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["create", "get", "list", "update", "watch"]
+- apiGroups: [""]
   resources: ["events"]
   verbs: ["create", "update"]
 - apiGroups: [""]
@@ -219,6 +222,9 @@ rules:
 - apiGroups: ["clusterlink.net"]
   resources: ["imports/status", "exports/status", "peers/status"]
   verbs: ["update"]
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["patch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

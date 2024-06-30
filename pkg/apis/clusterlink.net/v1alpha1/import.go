@@ -65,6 +65,8 @@ type ImportSpec struct {
 	// +kubebuilder:default="round-robin"
 	// LBScheme is the load-balancing scheme to use (e.g., random, static, round-robin)
 	LBScheme LBScheme `json:"lbScheme"`
+	// Alias is an optional external DNS name for this imported service
+	Alias string `json:"alias,omitempty"`
 }
 
 const (

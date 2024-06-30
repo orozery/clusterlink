@@ -253,23 +253,31 @@ func (m *Manager) addImport(ctx context.Context, imp *v1alpha1.Import) (err erro
 		return err
 	}
 
-	if imp.Namespace == m.namespace {
-		return nil
+	if imp.Namespace != m.namespace {
+		userService := &v1.Service{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      imp.Name,
+				Namespace: imp.Namespace,
+				Labels:    make(map[string]string),
+			},
+			Spec: v1.ServiceSpec{
+				ExternalName: fmt.Sprintf("%s.%s.svc.cluster.local", serviceName, m.namespace),
+				Type:         v1.ServiceTypeExternalName,
+			},
+		}
+
+		if err := m.addImportService(ctx, imp, userService); err != nil {
+			return err
+		}
 	}
 
-	userService := &v1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      imp.Name,
-			Namespace: imp.Namespace,
-			Labels:    make(map[string]string),
-		},
-		Spec: v1.ServiceSpec{
-			ExternalName: fmt.Sprintf("%s.%s.svc.cluster.local", serviceName, m.namespace),
-			Type:         v1.ServiceTypeExternalName,
-		},
+	if imp.Spec.Alias != "" {
+		if err := addCoreDNSRewrite(ctx, m.client, m.logger, &importName, imp.Spec.Alias); err != nil {
+			m.logger.Errorf("failed to configure CoreDNS: %v.", err)
+			return err
+		}
 	}
-
-	return m.addImportService(ctx, imp, userService)
+	return nil
 }
 
 // deleteImport removes the listening socket of a previously imported service.
@@ -277,7 +285,7 @@ func (m *Manager) deleteImport(ctx context.Context, name types.NamespacedName) e
 	m.logger.Infof("Deleting import '%s/%s'.", name.Namespace, name.Name)
 
 	// delete user service
-	errs := make([]error, 3)
+	errs := make([]error, 4)
 	errs[0] = m.deleteImportService(ctx, name, name)
 
 	if name.Namespace != m.namespace {
@@ -293,6 +301,8 @@ func (m *Manager) deleteImport(ctx context.Context, name types.NamespacedName) e
 	errs[2] = m.deleteImportEndpointSlices(ctx, name)
 
 	m.ports.Release(name)
+
+	errs[3] = removeCoreDNSRewrite(ctx, m.client, m.logger, &name)
 
 	return errors.Join(errs...)
 }

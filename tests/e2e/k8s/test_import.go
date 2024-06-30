@@ -434,3 +434,48 @@ func (s *TestSuite) TestImportMerge() {
 		httpecho.RunClientInPod, importedService, true, &util.PodFailedError{})
 	require.ErrorIs(s.T(), err, &util.PodFailedError{})
 }
+
+func (s *TestSuite) TestImportAlias() {
+	cl, err := s.fabric.DeployClusterlinks(1, nil)
+	require.Nil(s.T(), err)
+
+	// create export, peer, and allow-all policy
+	require.Nil(s.T(), cl[0].CreateService(&httpEchoService))
+	require.Nil(s.T(), cl[0].CreateExport(&httpEchoService))
+	require.Nil(s.T(), cl[0].CreatePolicy(util.PolicyAllowAll))
+	require.Nil(s.T(), cl[0].CreatePeer(cl[0]))
+
+	importedService := &util.Service{
+		Name: "imported",
+		Port: 80,
+	}
+
+	aliasedService := &util.Service{
+		Name: "my-clusterlink-alias.com",
+		Port: importedService.Port,
+	}
+
+	// create import with an alias
+	imp := &v1alpha1.Import{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      importedService.Name,
+			Namespace: cl[0].Namespace(),
+		},
+		Spec: v1alpha1.ImportSpec{
+			Port: importedService.Port,
+			Sources: []v1alpha1.ImportSource{{
+				Peer:            cl[0].Name(),
+				ExportName:      httpEchoService.Name,
+				ExportNamespace: cl[0].Namespace(),
+			}},
+			Alias: aliasedService.Name,
+		},
+	}
+
+	require.Nil(s.T(), cl[0].Cluster().Resources().Create(context.Background(), imp))
+
+	// verify service access via alias
+	data, err := cl[0].AccessService(httpecho.RunClientInPod, aliasedService, true, nil)
+	require.Nil(s.T(), err)
+	require.Equal(s.T(), cl[0].Name(), data)
+}

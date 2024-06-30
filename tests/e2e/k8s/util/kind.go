@@ -47,7 +47,9 @@ const (
 )
 
 // PodFailedError represents a pod that ran and returned a failure.
-type PodFailedError struct{}
+type PodFailedError struct{
+	Terminated v1.ContainerStateTerminated
+}
 
 func (e PodFailedError) Error() string {
 	return "pod failed"
@@ -343,7 +345,13 @@ func (c *KindCluster) RunPod(podSpec *Pod) (string, error) {
 	}
 	if pod.Status.Phase != v1.PodSucceeded {
 		if pod.Status.Phase == v1.PodFailed {
-			return "", &PodFailedError{}
+			var terminated v1.ContainerStateTerminated
+			if pod.Status.ContainerStatuses[0].State.Terminated != nil {
+				terminated = *pod.Status.ContainerStatuses[0].State.Terminated
+			}
+			return "", &PodFailedError{
+				Terminated: terminated,
+			}
 		}
 		return "", fmt.Errorf("pod did not succeed: %s", pod.Status.Phase)
 	}
