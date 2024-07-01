@@ -16,6 +16,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"path"
 
@@ -39,6 +40,7 @@ import (
 	"github.com/clusterlink-net/clusterlink/pkg/controlplane/xds"
 	"github.com/clusterlink-net/clusterlink/pkg/util/controller"
 	"github.com/clusterlink-net/clusterlink/pkg/util/grpc"
+	utilhttp "github.com/clusterlink-net/clusterlink/pkg/util/http"
 	"github.com/clusterlink-net/clusterlink/pkg/util/log"
 	"github.com/clusterlink-net/clusterlink/pkg/util/runnable"
 	"github.com/clusterlink-net/clusterlink/pkg/util/tls"
@@ -219,11 +221,20 @@ func (o *Options) Run() error {
 		return err
 	}
 
+	readinessListenAddress := fmt.Sprintf("0.0.0.0:%d", api.ReadinessListenPort)
+	httpServer := utilhttp.NewServer("controlplane-http", nil)
+	httpServer.Router().Get("/", func(w http.ResponseWriter, _ *http.Request) {
+		if !authzManager.IsReady() {
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}
+	})
+
 	runnableManager := runnable.NewManager()
 	runnableManager.Add(peerCertsWatcher)
 	runnableManager.Add(controller.NewManager(mgr))
 	runnableManager.Add(controlManager)
 	runnableManager.AddServer(controlplaneServerListenAddress, grpcServer)
+	runnableManager.AddServer(readinessListenAddress, httpServer)
 
 	return runnableManager.Run()
 }

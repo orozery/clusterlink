@@ -104,6 +104,9 @@ spec:
           image: {{.containerRegistry}}cl-controlplane:{{.tag}}
           args: ["--log-level", "{{.logLevel}}"]
           imagePullPolicy: IfNotPresent
+          readinessProbe:
+            httpGet:
+              port:  {{.controlplaneReadinessPort}}
           ports:
             - containerPort: {{.controlplanePort}}
           volumeMounts:
@@ -324,8 +327,9 @@ func K8SConfig(config *Config) ([]byte, error) {
 		"dataplaneCertMountPath": dpapp.CertificateFile,
 		"dataplaneKeyMountPath":  dpapp.KeyFile,
 
-		"controlplanePort": cpapi.ListenPort,
-		"dataplanePort":    dpapi.ListenPort,
+		"controlplanePort":          cpapi.ListenPort,
+		"controlplaneReadinessPort": cpapi.ReadinessListenPort,
+		"dataplanePort":             dpapi.ListenPort,
 	}
 
 	var k8sConfig, nsConfig bytes.Buffer
