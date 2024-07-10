@@ -237,7 +237,7 @@ func NewDataplane(
 		listeners:      make(map[string]*listener.Listener),
 		listenerEnd:    make(map[string]chan bool),
 		tlsConfig: &tls.Config{
-			MinVersion: tls.VersionTLS12,
+			MaxVersion: tls.VersionTLS12,
 			ClientAuth: tls.RequireAndVerifyClientCert,
 		},
 		logger: logger,
